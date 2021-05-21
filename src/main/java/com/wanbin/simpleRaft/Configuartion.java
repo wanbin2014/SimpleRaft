@@ -1,4 +1,4 @@
-package com.wanbin.jraft;
+package com.wanbin.simpleRaft;
 
 public class Configuartion {
 }

@@ -1,16 +1,19 @@
-package com.wanbin.jraft;
+package com.wanbin.simpleRaft.client;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ReplayingDecoder;
-import io.netty.util.concurrent.EventExecutorGroup;
 
 import java.util.List;
 
-public class AppendEntriesDecode extends ReplayingDecoder<Void> {
+public class AddReplyDecode extends ReplayingDecoder<Integer> {
+    int res;
+    public int getResponse() {
+        return res;
+    }
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-
+        res = in.readInt();
+        ctx.close();
     }
 }

@@ -1,17 +1,15 @@
-package com.wanbin.jraft;
+package com.wanbin.simpleRaft;
 
-import com.wanbin.jraft.rpc.AppendEntries;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ReplayingDecoder;
 import io.netty.util.CharsetUtil;
 
-import java.util.ArrayList;
 import java.util.List;
 
 
-public class ClientRequestDecode extends ReplayingDecoder<Void> {
+public class ClientAddRequestDecode extends ReplayingDecoder<Void> {
 
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
@@ -39,22 +37,15 @@ public class ClientRequestDecode extends ReplayingDecoder<Void> {
                                     State.log.get((int)j).commit();
                                 }
                                 State.lastApplied = n;
-                                ctx.channel().write(Unpooled.copyLong(0));
+                                ctx.channel().write(Unpooled.copyInt(0));
                                 return;
                             }
                         }
                     }
                 }
             }
-            ctx.channel().write(Unpooled.copyLong(1));
+            ctx.channel().write(Unpooled.copyInt(1));
             return;
-
-
-
-
-
-
-
 
         }
     }

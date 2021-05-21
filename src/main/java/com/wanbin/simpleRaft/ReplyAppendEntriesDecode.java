@@ -1,10 +1,12 @@
-package com.wanbin.jraft;
+package com.wanbin.simpleRaft;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ReplayingDecoder;
 import io.netty.util.CharsetUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
@@ -13,6 +15,7 @@ enum  ReplyAppendEntriesMsg {
     SUCCESS,
 }
 public class ReplyAppendEntriesDecode extends ReplayingDecoder<ReplyAppendEntriesMsg> {
+    final static Logger logger = LoggerFactory.getLogger(ReplyAppendEntriesDecode.class);
     long term;
     boolean success;
     String peer;
@@ -39,6 +42,7 @@ public class ReplyAppendEntriesDecode extends ReplayingDecoder<ReplyAppendEntrie
                 throw new Error("Shouldn't reach here!");
 
         }
+        logger.info("Received a reply from a AppendEntries , term={}, success={}", term, success);
         if (success == false) {
             if (term > State.currentTerm) {
                 State.currentTerm = term;
@@ -50,15 +54,17 @@ public class ReplyAppendEntriesDecode extends ReplayingDecoder<ReplyAppendEntrie
                     nextIdx -= 1;
                     State.nextIndex.put(peer, (long) nextIdx);
                     //RPC type. 1 for RequestVote 2 for AppendEntries
-                    ctx.channel().write(Unpooled.copyLong(2));
+                    ctx.channel().write(Unpooled.copyInt(2));
                     ctx.channel().write(Unpooled.copyLong(State.currentTerm));
                     ctx.channel().write(Unpooled.copiedBuffer(State.leaderId, CharsetUtil.UTF_8));
                     ctx.channel().write(Unpooled.copyLong(nextIdx));
                     ctx.channel().write(Unpooled.copyLong(State.log.get(nextIdx).getTerm()));
 
                     int num = State.log.size() - 1 - nextIdx;
+                    long replicatedLogIndex = 0;
                     if (num == 0) {
                         ctx.channel().write(Unpooled.copyLong(0));
+                        replicatedLogIndex = nextIdx;
                     } else {
                         ctx.channel().write(Unpooled.copyLong(num));
                         for (int i = 0; i < num; i++) {
@@ -67,29 +73,36 @@ public class ReplyAppendEntriesDecode extends ReplayingDecoder<ReplyAppendEntrie
                                     + State.log.get(i + nextIdx).command;
                             ctx.channel().write(Unpooled.copiedBuffer(content, CharsetUtil.UTF_8));
                         }
+                        replicatedLogIndex = State.log.size() - 1;
                     }
                     ctx.channel().write(Unpooled.copyLong(State.commitIndex));
                     ctx.channel().flush();
-                    ctx.channel().pipeline().addLast(new ReplyAppendEntriesDecode(peer, State.log.size() - 1));
+                    ctx.channel().pipeline().addLast(new ReplyAppendEntriesDecode(peer, replicatedLogIndex));
                     ctx.channel().pipeline().remove(this);
                 }
             }
         } else {
-            if (this.replicatedLogIndex != 0) {
-                State.appendEntriesResult.compute(this.replicatedLogIndex, (k, v) -> {
-                    if (v == null) {
-                        return 1;
-                    } else if (v + 1 > (float) (State.members.length / 2.0)) {
-                        if (this.replicatedLogIndex > State.matchIndex.get(peer).longValue()) {
-                            State.matchIndex.put(peer, this.replicatedLogIndex);
-                            notify();
+            synchronized (State.class) {
+
+                State.appendEntrySuccess++;
+                if (this.replicatedLogIndex != 0) {
+                    State.appendEntriesResult.compute(this.replicatedLogIndex, (k, v) -> {
+                        if (v == null) {
+                            return 1;
+                        } else if (v + 1 > (float) (State.members.length / 2.0)) {
+                            if (this.replicatedLogIndex > State.matchIndex.get(peer).longValue()) {
+                                State.matchIndex.put(peer, this.replicatedLogIndex);
+                                notifyAll();
+                            }
+                            return null;
+                        } else {
+                            return v + 1;
                         }
-                        return null;
-                    } else {
-                        return v + 1;
-                    }
-                });
+                    });
+                }
+
             }
+            ctx.close();
         }
 
 

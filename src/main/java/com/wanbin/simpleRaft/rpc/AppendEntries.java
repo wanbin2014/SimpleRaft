@@ -1,6 +1,4 @@
-package com.wanbin.jraft.rpc;
-
-import com.wanbin.jraft.Entry;
+package com.wanbin.simpleRaft.rpc;
 
 import java.util.List;
 

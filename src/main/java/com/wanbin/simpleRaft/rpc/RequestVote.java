@@ -1,4 +1,4 @@
-package com.wanbin.jraft.rpc;
+package com.wanbin.simpleRaft.rpc;
 
 public class RequestVote {
     long term; //candidate's term
@@ -44,10 +44,4 @@ public class RequestVote {
     public void setLastTerm(long lastTerm) {
         this.lastTerm = lastTerm;
     }
-}
-
-class Response {
-    long type; //the kind of rpc. 1 for RequestVote, 2 for AppendEntries
-    long term; //currentTerm, for candidate to update itself
-    boolean voteGranted; //true means candidate received vote
 }

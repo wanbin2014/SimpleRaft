@@ -1,4 +1,4 @@
-package com.wanbin.jraft;
+package com.wanbin.simpleRaft;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
@@ -10,22 +10,19 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
 import org.apache.commons.cli.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
-public class Server {
-
+public class SimpleRaftServer {
+    final static Logger logger = LoggerFactory.getLogger(SimpleRaftServer.class);
 
     static EventLoopGroup workerGroup = new NioEventLoopGroup();
 
     public static void start(String ip, int port, String[] members) throws Exception {
-        State.load();
-        State.setCandidateId(ip + ":" + port);
-        State.setMembers(members);
-        State.startElection(new Random().nextInt() % 10);
 
         EventLoopGroup bossGroup = new NioEventLoopGroup();
-
 
         try {
             ServerBootstrap b = new ServerBootstrap();
@@ -34,17 +31,24 @@ public class Server {
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         public void initChannel(SocketChannel ch) throws Exception {
-                            ch.pipeline().addLast("ReadTimeoutHandler", new ReadTimeoutHandler(30));
-                            ch.pipeline().addLast("WriteTimeoutHandler", new WriteTimeoutHandler(30));
+                            ch.pipeline().addLast("ReadTimeoutHandler", new ReadTimeoutHandler(3000));
+                            ch.pipeline().addLast("WriteTimeoutHandler", new WriteTimeoutHandler(3000));
                             ch.pipeline().addLast(new FirstDecode());
                         }
                     });
             ChannelFuture f = b.bind(ip, port).sync();
+
+            State.setCandidateId(ip + ":" + port);
+            State.setMembers(members);
+            State.load();
+            State.startElection(new Random().nextInt(10));
+
             f.channel().closeFuture().sync();
             System.out.println("server quit");
         } finally {
             workerGroup.shutdownGracefully();
             bossGroup.shutdownGracefully();
+            State.shutdown();
         }
 
     }
@@ -60,8 +64,8 @@ public class Server {
             CommandLine cmd = parser.parse(options, args);
             if (cmd.hasOption("help") || !cmd.hasOption("ip") || !cmd.hasOption("port") || !cmd.hasOption("members")) {
                 HelpFormatter formatter = new HelpFormatter();
-                formatter.printHelp("jraft <ip> <port> <members>" +
-                        "split multiple member by comma. The pattern of member is ip:port", options);
+                formatter.printHelp("SimpleRaft <ip> <port> <members> " +
+                        "The pattern of members is ip:port,ip:port,...", options);
                 return;
             }
 
@@ -69,19 +73,22 @@ public class Server {
             int port = ((Number) cmd.getParsedOptionValue("port")).intValue();
             String members = cmd.getOptionValue("members");
             String[] member = members.split(",");
-            int i = 0;
+            String[] memberExcludeSelf = new String[member.length-1];
+            int i , j = 0;
             for (i = 0; i < member.length; i++) {
                 String[] fields = member[i].split(":");
-                if (fields[0].equals(ip) && Integer.getInteger(fields[1]).equals(port)) {
-                    break;
+                if (fields[0].equals(ip) && Integer.valueOf(fields[1]).equals(port)) {
+                    continue;
                 }
+                memberExcludeSelf[j] = member[i];
+                j++;
             }
-            if (i == member.length) {
+            if (memberExcludeSelf.length != member.length-1) {
                 HelpFormatter formatter = new HelpFormatter();
-                formatter.printHelp("The members of cluster should require local server.", options);
+                formatter.printHelp("The members of cluster should contains this server itself.", options);
             }
 
-            Server.start(ip, port, member);
+            SimpleRaftServer.start(ip, port, memberExcludeSelf);
 
 
         } catch (Exception e) {

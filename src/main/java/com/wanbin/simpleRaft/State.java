@@ -1,27 +1,29 @@
-package com.wanbin.jraft;
+package com.wanbin.simpleRaft;
 
-import com.wanbin.jraft.rpc.AppendEntries;
-import com.wanbin.jraft.rpc.RequestVote;
+import com.wanbin.simpleRaft.rpc.AppendEntries;
+import com.wanbin.simpleRaft.rpc.RequestVote;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.MessageToByteEncoder;
-import io.netty.handler.codec.MessageToMessageEncoder;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
 import io.netty.util.CharsetUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class State {
+    final static Logger logger = LoggerFactory.getLogger(State.class);
     static volatile long currentTerm; // latest term server has been seen
     static volatile String votedFor; // candidateId that received vote in current term;
     static ArrayList<Entry> log = new ArrayList<>(); // log entries
+    static int writeLogIndex = 0;
 
     static volatile long commitIndex; // index of highest log entry known to be committed
     static volatile long lastApplied; // index of highest log entry applied to state machine
@@ -42,6 +44,13 @@ public class State {
 
     static volatile String leaderId;
 
+    static Thread applyLogThread ;
+    static Thread writeLogThread;
+    static Thread heartbeatThread;
+    static int connectSucess;
+    static int appendEntrySuccess;
+
+
     public static void setMembers(String[] members) {
         State.members = members;
 
@@ -52,28 +61,124 @@ public class State {
     }
 
     public static synchronized void load() throws IOException {
-        BufferedReader input = new BufferedReader(new FileReader("./meta"));
-        String[] fields = input.toString().split(",");
-        currentTerm = Long.parseLong(fields[0]);
-        votedFor = fields[1];
-        input.close();
-
-        input = new BufferedReader(new FileReader("./log"));
-        String line;
-        long idx = 0;
-        while ((line = input.readLine()) != null) {
-            fields = line.split(",");
-            log.add(new Entry(Long.valueOf(fields[0]),fields[1]));
-            idx++;
+        try {
+            String fileName = "./" + candidateId + ".meta";
+            BufferedReader input = new BufferedReader(new FileReader(fileName));
+            String[] fields = input.readLine().toString().split(",");
+            currentTerm = Long.parseLong(fields[0]);
+            votedFor = fields[1];
+            input.close();
+        } catch (FileNotFoundException e) {
+            currentTerm = 0;
+            votedFor = null;
         }
-        commitIndex = 0;
-        for(int i = 0; i < members.length; i++) {
-            nextIndex.put(members[i], idx);
-            matchIndex.put(members[i],0L);
+        try {
+            String fileName = "./" + candidateId + ".log";
+            BufferedReader input = new BufferedReader(new FileReader(fileName));
+            String line;
+            long idx = 0;
+            while ((line = input.readLine()) != null) {
+                String[] fields = line.split(",");
+                log.add(new Entry(Long.valueOf(fields[0]), fields[1]));
+                idx++;
+            }
+            input.close();
+
+            commitIndex = 0;
+            for(int i = 0; i < members.length; i++) {
+                nextIndex.put(members[i], idx);
+                matchIndex.put(members[i],0L);
+            }
+        } catch (FileNotFoundException e) {
+            currentTerm = 0;
+            votedFor = null;
+
+            commitIndex = 0;
+            for(int i = 0; i < members.length; i++) {
+                nextIndex.put(members[i], 0L);
+                matchIndex.put(members[i],0L);
+            }
         }
 
         ApplyLog applyLog = new ApplyLog();
-        new Thread(applyLog).start();
+        applyLogThread = new Thread(applyLog);
+        applyLogThread.start();
+
+        WriteLog writeLog = new WriteLog();
+        writeLogThread = new Thread(writeLog);
+        writeLogThread.start();
+
+        logger.info("Load meta data and log successfully");
+
+    }
+
+    public static void shutdown() {
+        applyLogThread.interrupt();
+        writeLogThread.interrupt();
+
+        while (applyLogThread.isAlive() || writeLogThread.isAlive()) {
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        if (heartbeatThread != null) {
+            heartbeatThread.isInterrupted();
+        }
+        while (heartbeatThread.isAlive() ) {
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public static class WriteLog implements Runnable {
+
+        private void flush() {
+            synchronized (State.class) {
+                try {
+                    String fileName = "./" + candidateId + ".meta";
+                    BufferedWriter writer = new BufferedWriter(new FileWriter(fileName));
+                    String s = currentTerm + "," + votedFor;
+                    writer.write(s);
+                    writer.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                try {
+                    String fileName = "./" + candidateId + ".log";
+                    BufferedWriter writer = new BufferedWriter(new FileWriter(fileName, true));
+
+                    for (int i = writeLogIndex; i < State.log.size(); i++) {
+                        String line = State.log.get(i).toString();
+                        writer.write(line);
+                    }
+                    writer.close();
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+
+        @Override
+        public synchronized void run() {
+            while (true) {
+                flush();
+                try {
+                    wait(1000);
+                } catch (InterruptedException e) {
+                    flush();
+                    break;
+                }
+
+
+            }
+        }
 
     }
 
@@ -105,32 +210,37 @@ public class State {
         String peer = ip + ":" + String.valueOf(port);
 
         Bootstrap b = new Bootstrap()
-                .group(Server.workerGroup)
+                .group(SimpleRaftServer.workerGroup)
                 .channel(NioSocketChannel.class)
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) throws Exception {
-                        ch.pipeline().addFirst("ReadTimeoutHandler", new ReadTimeoutHandler(30));
-                        ch.pipeline().addLast("WriteTimeoutHandler", new WriteTimeoutHandler(30));
+                        ch.pipeline().addFirst("ReadTimeoutHandler", new ReadTimeoutHandler(3000));
+                        ch.pipeline().addLast("WriteTimeoutHandler", new WriteTimeoutHandler(3000));
                     }
                 });
 
         ChannelFuture f = b.connect(ip, port).addListener((ChannelFuture future) -> {
             if (future.isSuccess()) {
                 //RPC type. 1 for RequestVote, 2 for AppendEntries
-                future.channel().write(Unpooled.copyLong(2));
+                future.channel().write(Unpooled.copyInt(2));
                 future.channel().write(Unpooled.copyLong(appendEntries.getTerm()));
+                future.channel().write(Unpooled.copyInt(appendEntries.getLeaderId()
+                        .getBytes(StandardCharsets.UTF_8).length));
                 future.channel().write(Unpooled.copiedBuffer(appendEntries.getLeaderId(),CharsetUtil.UTF_8));
                 future.channel().write(Unpooled.copyLong(appendEntries.getPrevLogIndex()));
                 future.channel().write(Unpooled.copyLong(appendEntries.getPrevLogTerm()));
                 long replicatedLogIndex = 0;
                 if (appendEntries.getEntries() == null || appendEntries.getEntries().size() == 0) {
                     future.channel().write(Unpooled.copyLong(0));
+                    replicatedLogIndex = appendEntries.getPrevLogIndex();
                 } else {
                     future.channel().write(Unpooled.copyLong(appendEntries.getEntries().size()));
                     for(int i = 0; i < appendEntries.getEntries().size(); i++) {
-                        future.channel().write(Unpooled.copyLong(i));
+                        future.channel().write(Unpooled.copyInt(appendEntries.getEntries().get(i)
+                                .getBytes(StandardCharsets.UTF_8).length));
+
                         future.channel().write(Unpooled.copiedBuffer(appendEntries.getEntries().get(i),
                                 CharsetUtil.UTF_8));
                     }
@@ -149,23 +259,25 @@ public class State {
         InetSocketAddress addr = new InetSocketAddress(ip,port);
 
         Bootstrap b = new Bootstrap()
-                .group(Server.workerGroup)
+                .group(SimpleRaftServer.workerGroup)
                 .channel(NioSocketChannel.class)
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) throws Exception {
                         ch.pipeline().addFirst("ReadTimeoutHandler", new ReadTimeoutHandler(300));
-                        ch.pipeline().addLast("WriteTimeoutHandler", new WriteTimeoutHandler(30));
+                        ch.pipeline().addLast("WriteTimeoutHandler", new WriteTimeoutHandler(300));
                         ch.pipeline().addLast(new ReplyVoteDecode());
                     }
                 });
 
         ChannelFuture f = b.connect(ip, port).addListener((ChannelFuture future) -> {
             if (future.isSuccess()) {
+                connectSucess++;
                 //RPC type. 1 for RequestVote, 2 for AppendEntries
-                future.channel().write(Unpooled.copyLong(1));
+                future.channel().write(Unpooled.copyInt(1));
                 future.channel().write(Unpooled.copyLong(requestVote.getTerm()));
+                future.channel().write(Unpooled.copyInt(requestVote.getCandidateId().getBytes(StandardCharsets.UTF_8).length));
                 future.channel().write(Unpooled.copiedBuffer(
                         requestVote.getCandidateId(), CharsetUtil.UTF_8));
                 future.channel().write(Unpooled.copyLong(requestVote.getLastLogIndex()));
@@ -174,12 +286,43 @@ public class State {
             }
         });
 
+
+    }
+
+    static class Heartbeat implements Runnable {
+
+        @Override
+        public synchronized  void run() {
+            while (leaderId.equals(candidateId)) {
+                logger.info("Send heart beat to all server");
+                appendEntrySuccess = 0;
+                callAllAppendEntries(false);
+                try {
+                    while (appendEntrySuccess <= members.length / 2.0) {
+                        wait(1000);
+                    }
+                } catch (InterruptedException e) {
+                    return;
+                }
+                try {
+                    wait(5000);
+                } catch (InterruptedException e) {
+                    break;
+                }
+
+            }
+        }
     }
 
     public static synchronized void callAllAppendEntries(boolean containEntries) {
         for(int i = 0; i < members.length; i++) {
             long prevLogIndex = State.nextIndex.get(members[i]);
-            long prevLogTerm = State.log.get((int) prevLogIndex).term;
+            long prevLogTerm = 0;
+            if (State.log.size() == 0) {
+                prevLogTerm = 0;
+            } else {
+                prevLogTerm = State.log.get((int) prevLogIndex).term;
+            }
 
             List<String> entries = null;
             if (containEntries == true) {
@@ -204,26 +347,44 @@ public class State {
 
         State.class.wait(random * 1000);
 
+        if (leaderId == null) {
+            currentTerm += 1;
+        }
 
         while (leaderId == null) {
-            currentTerm += 1;
+            logger.info("No valid leader, so start a election");
+            if ((connectSucess+1) > (float) (members.length / 2.0))
+                currentTerm += 1;
             votedFor = candidateId;
 
             voteCount = 0;
+            connectSucess = 0;
             for (int i = 0; i < members.length; i++) {
                 String[] fields = members[i].split(":");
-                RequestVote requestVote = new RequestVote(currentTerm, candidateId, log.size() - 1,
-                        log.get(log.size() - 1).getTerm());
+                RequestVote requestVote = null;
+                if (log.size() > 0) {
+                    requestVote = new RequestVote(currentTerm, candidateId, log.size() - 1,
+                            log.get(log.size() - 1).getTerm());
+                } else {
+                    requestVote = new RequestVote(currentTerm, candidateId, 0,
+                            0);
+                }
                 State.callRequestVote(requestVote, fields[0], Integer.valueOf(fields[1]));
             }
-            State.class.wait(1000);
+
+            logger.info("CurrentTerm:{}, request vote to all server",currentTerm);
+            State.class.wait(10000);
+            logger.info("CurrentTerm:{}, receive {} votes", currentTerm,voteCount);
 
 
             //received a majority of votes , upgrade to leader
-            if (voteCount > (float) (members.length / 2.0) && leaderId == null) {
+            if ((voteCount+1) > (float) (members.length / 2.0) && leaderId == null) {
+                logger.info("Succeed in election");
                 leaderId = candidateId;
-                callAllAppendEntries(false);
+                heartbeatThread = new Thread(new Heartbeat());
+                heartbeatThread.start();
             }
+            State.class.wait(random * 1000);
 
         }
 

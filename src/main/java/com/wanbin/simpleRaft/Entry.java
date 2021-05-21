@@ -1,4 +1,4 @@
-package com.wanbin.jraft;
+package com.wanbin.simpleRaft;
 
 public class Entry {
     long term;
@@ -23,6 +23,11 @@ public class Entry {
 
     public void setCommand(String command) {
         this.command = command;
+    }
+
+    @Override
+    public String toString() {
+        return term + ":" + command;
     }
 
     public void commit() {
