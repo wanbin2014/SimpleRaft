@@ -8,12 +8,31 @@ import io.netty.util.CharsetUtil;
 
 import java.util.List;
 
+enum AddMsg {
+    CMDLEN,
+    CMD,
+}
 
-public class ClientAddRequestDecode extends ReplayingDecoder<Void> {
+
+public class ClientAddRequestDecode extends ReplayingDecoder<AddMsg> {
+    int len = 0;
+    String command = null;
+    public ClientAddRequestDecode() {
+        super(AddMsg.CMDLEN);
+    }
 
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-        String command = in.toString(CharsetUtil.UTF_8);
+        switch (state()) {
+            case CMDLEN:
+                len = in.readInt();
+                checkpoint(AddMsg.CMD);
+            case CMD:
+                command = (String)in.readCharSequence(len,CharsetUtil.UTF_8);
+                checkpoint(AddMsg.CMDLEN);
+                break;
+        }
+
         synchronized (State.class) {
             Entry entry = new Entry(State.currentTerm,command);
             State.log.add(entry);

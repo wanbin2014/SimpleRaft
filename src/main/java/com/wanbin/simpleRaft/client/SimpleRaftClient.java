@@ -16,6 +16,7 @@ import io.netty.util.CharsetUtil;
 import org.apache.commons.cli.*;
 
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class SimpleRaftClient {
@@ -24,7 +25,7 @@ public class SimpleRaftClient {
         Options options = new Options();
         options.addOption(Option.builder("i").longOpt("ip").desc("server ip address").hasArg().build());
         options.addOption(Option.builder("p").longOpt("port").desc("server port").type(Number.class).hasArg().build());
-        options.addOption(Option.builder("c").longOpt("cmd").desc("command").hasArg().build());
+        options.addOption(Option.builder("c").longOpt("command").desc("command of state machine").hasArg().build());
         options.addOption(Option.builder("h").longOpt("help").desc("print help").build());
 
         CommandLine cmd = null;
@@ -40,7 +41,7 @@ public class SimpleRaftClient {
 
         String ip = cmd.getOptionValue("ip");
         int port = ((Number) cmd.getParsedOptionValue("port")).intValue();
-        String[] command = cmd.getOptionValue("cmd").split(" ");
+        String[] command = cmd.getOptionValue("command").split(" ");
 
         if (!command[0].equals("ls") && !command[0].equals("add")) {
             System.err.println(command[0] + " is a valid command. Now only supports few command like ls and add");
@@ -71,6 +72,7 @@ public class SimpleRaftClient {
                     future.channel().pipeline().addLast(new LsReplyDecode());
                 } else if (command[0].equals("add")) {
                     future.channel().write(Unpooled.copyLong(3));
+                    future.channel().write(Unpooled.copyInt(command[1].getBytes(StandardCharsets.UTF_8).length));
                     future.channel().write(Unpooled.copiedBuffer(command[1], CharsetUtil.UTF_8));
                     future.channel().pipeline().addLast(new AddReplyDecode());
 

@@ -47,6 +47,7 @@ public class State {
     static Thread applyLogThread ;
     static Thread writeLogThread;
     static Thread heartbeatThread;
+    static Thread leaderFreshThread;
     static int connectSucess;
     static int appendEntrySuccess;
 
@@ -108,6 +109,7 @@ public class State {
         writeLogThread = new Thread(writeLog);
         writeLogThread.start();
 
+
         logger.info("Load meta data and log successfully");
 
     }
@@ -124,7 +126,7 @@ public class State {
             }
         }
         if (heartbeatThread != null) {
-            heartbeatThread.isInterrupted();
+            heartbeatThread.interrupted();
         }
         while (heartbeatThread.isAlive() ) {
             try {
@@ -134,6 +136,8 @@ public class State {
             }
         }
     }
+
+
 
     public static class WriteLog implements Runnable {
 
@@ -289,24 +293,45 @@ public class State {
 
     }
 
+    /*
+
+     */
     static class Heartbeat implements Runnable {
+
+        long timeout;
+
+        public Heartbeat(long timeout) {
+            this.timeout = timeout;
+        }
 
         @Override
         public synchronized  void run() {
             while (leaderId.equals(candidateId)) {
                 logger.info("Send heart beat to all server");
+                long startTime = System.nanoTime();
                 appendEntrySuccess = 0;
                 callAllAppendEntries(false);
                 try {
                     while (appendEntrySuccess <= members.length / 2.0) {
-                        wait(1000);
+                        long endTime =  System.nanoTime();
+                        long residual = timeout - (endTime - startTime) / 1000000;
+                        if (residual <= 0) {
+                            break;
+                        }
+                        wait(residual > 1000 ? 1000 : residual);
                     }
                 } catch (InterruptedException e) {
-                    return;
+                    logger.info("The process of sending heartbeat occur interrupted");
+                    break;
                 }
                 try {
-                    wait(5000);
+                    long endTime =  System.nanoTime();
+                    long residual = timeout - (endTime - startTime) / 1000000;
+                    if (residual > 0) {
+                        wait(residual);
+                    }
                 } catch (InterruptedException e) {
+                    logger.info("The process of sending heartbeat occur interrupted");
                     break;
                 }
 
@@ -343,51 +368,61 @@ public class State {
             State.callAppendEntries(appendEntries, fields[0], Integer.valueOf(fields[1]));
         }
     }
-    public  static synchronized void startElection(int random) throws InterruptedException {
+    public  static synchronized void startElection(int random)  {
 
-        State.class.wait(random * 1000);
-
-        if (leaderId == null) {
-            currentTerm += 1;
-        }
-
-        while (leaderId == null) {
-            logger.info("No valid leader, so start a election");
-            if ((connectSucess+1) > (float) (members.length / 2.0))
-                currentTerm += 1;
-            votedFor = candidateId;
-
-            voteCount = 0;
-            connectSucess = 0;
-            for (int i = 0; i < members.length; i++) {
-                String[] fields = members[i].split(":");
-                RequestVote requestVote = null;
-                if (log.size() > 0) {
-                    requestVote = new RequestVote(currentTerm, candidateId, log.size() - 1,
-                            log.get(log.size() - 1).getTerm());
-                } else {
-                    requestVote = new RequestVote(currentTerm, candidateId, 0,
-                            0);
-                }
-                State.callRequestVote(requestVote, fields[0], Integer.valueOf(fields[1]));
-            }
-
-            logger.info("CurrentTerm:{}, request vote to all server",currentTerm);
-            State.class.wait(10000);
-            logger.info("CurrentTerm:{}, receive {} votes", currentTerm,voteCount);
-
-
-            //received a majority of votes , upgrade to leader
-            if ((voteCount+1) > (float) (members.length / 2.0) && leaderId == null) {
-                logger.info("Succeed in election");
-                leaderId = candidateId;
-                heartbeatThread = new Thread(new Heartbeat());
-                heartbeatThread.start();
-            }
+        try {
             State.class.wait(random * 1000);
+            if (leaderId == null) {
+                currentTerm += 1;
+            }
+            while(true) {
 
+                if (leaderId == null) {
+                    logger.info("No valid leader, so start a election");
+                    if (leaderFreshThread != null) {
+                        leaderFreshThread.interrupted();
+                        leaderFreshThread = null;
+                    }
+                    if ((connectSucess + 1) > (float) (members.length / 2.0))
+                        currentTerm += 1;
+                    votedFor = candidateId;
+
+                    voteCount = 0;
+                    connectSucess = 0;
+                    for (int i = 0; i < members.length; i++) {
+                        String[] fields = members[i].split(":");
+                        RequestVote requestVote = null;
+                        if (log.size() > 0) {
+                            requestVote = new RequestVote(currentTerm, candidateId, log.size() - 1,
+                                    log.get(log.size() - 1).getTerm());
+                        } else {
+                            requestVote = new RequestVote(currentTerm, candidateId, 0,
+                                    0);
+                        }
+                        State.callRequestVote(requestVote, fields[0], Integer.valueOf(fields[1]));
+                    }
+
+                    logger.info("CurrentTerm:{}, request vote to all server", currentTerm);
+                    State.class.wait(10000);
+                    logger.info("CurrentTerm:{}, receive {} votes", currentTerm, voteCount);
+
+
+                    //received a majority of votes , upgrade to leader
+                    if ((voteCount + 1) > (float) (members.length / 2.0) && leaderId == null) {
+                        logger.info("Succeed in election");
+                        leaderId = candidateId;
+                        heartbeatThread = new Thread(new Heartbeat(5000));
+                        heartbeatThread.start();
+                    }
+                    State.class.wait(random * 1000);
+
+                } else {
+                    State.class.wait(1000);
+                }
+            }
+        } catch (InterruptedException e) {
+            logger.info("The loop of processing election interrupt");
+            return;
         }
-
     }
-
 }

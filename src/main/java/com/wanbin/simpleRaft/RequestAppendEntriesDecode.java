@@ -23,6 +23,36 @@ enum AppendEntiesMsg {
     ENTRYCONTENT,
     LEADERCOMMIT,
 }
+
+class LeaderTimeout implements Runnable{
+    long timeout;
+
+    public LeaderTimeout(long timeout) {
+        this.timeout = timeout;
+    }
+
+    @Override
+    public void run() {
+        synchronized (State.class) {
+            long startTime = System.nanoTime();
+            long residual = 0;
+            while(true) {
+                try {
+                    State.class.wait(residual == 0 ? 1000 : residual );
+                } catch (InterruptedException e) {
+                    return;
+                }
+                long endTime = System.nanoTime();
+                residual = timeout - (endTime - startTime) / 1000000;
+                if (residual <= 0) {
+                    break;
+                }
+            }
+            State.leaderId = null;
+        }
+
+    }
+}
 public class RequestAppendEntriesDecode extends ReplayingDecoder<AppendEntiesMsg> {
 
     final static Logger logger = LoggerFactory.getLogger(RequestAppendEntriesDecode.class);
@@ -139,6 +169,13 @@ public class RequestAppendEntriesDecode extends ReplayingDecoder<AppendEntiesMsg
             }
 
             State.leaderId = leaderId;
+            if (State.leaderFreshThread != null) {
+                State.leaderFreshThread.interrupt();
+                State.leaderFreshThread = null;
+            }
+            State.leaderFreshThread = new Thread(new LeaderTimeout(10000));
+            State.leaderFreshThread.start();
+
             if (leaderCommit > State.commitIndex) {
                 if (State.log.size() == 0) {
                     State.commitIndex = 0;
