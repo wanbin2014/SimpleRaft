@@ -72,11 +72,13 @@ public class SimpleRaftClient {
             if (future.isSuccess()) {
                 if (command[0].equals("ls")) {
                     future.channel().write(Unpooled.copyLong(4));
+                    future.channel().flush();
                     future.channel().pipeline().addLast(new LsReplyDecode());
                 } else if (command[0].equals("add")) {
                     future.channel().write(Unpooled.copyLong(3));
                     future.channel().write(Unpooled.copyInt(command[1].getBytes(StandardCharsets.UTF_8).length));
                     future.channel().write(Unpooled.copiedBuffer(command[1], CharsetUtil.UTF_8));
+                    future.channel().flush();
                     future.channel().pipeline().addLast(new AddReplyDecode());
 
                 }
