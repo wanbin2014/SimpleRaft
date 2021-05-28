@@ -103,7 +103,7 @@ public class SimpleRaftClient {
                 logger.info("Occur error, Err code:" + decode.getResponse());
             }
         } else {
-            logger.info("internal error!");
+            logger.info("internal error! invalid class, class is {}", f.channel().pipeline().last());
         }
 
 

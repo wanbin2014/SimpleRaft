@@ -39,6 +39,11 @@ public class ClientAddRequestDecode extends ReplayingDecoder<AddMsg> {
         }
 
         logger.info("Received message from client. message:{}", command);
+        if (!State.leaderId.equals(State.candidateId)) {
+            logger.info("illegal request for follower, Please request for leader");
+            ctx.channel().writeAndFlush(Unpooled.copyInt(1));
+            return;
+        }
         synchronized (State.class) {
             Entry entry = new Entry(State.currentTerm,command);
             State.log.add(entry);
@@ -61,7 +66,7 @@ public class ClientAddRequestDecode extends ReplayingDecoder<AddMsg> {
                     for (int i = 0; i < State.members.length; i++) {
                         if (State.matchIndex.get(State.members[i]) >= n) {
                             count++;
-                            if (count > State.members.length / 2.0) {
+                            if (count >= State.members.length / 2.0) {
                                 if (State.log.get(n).getTerm() == State.currentTerm) {
                                     State.commitIndex = n;
                                     for (long j = State.lastApplied; j <= n; j++) {

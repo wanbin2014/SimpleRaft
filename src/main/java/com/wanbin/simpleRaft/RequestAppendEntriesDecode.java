@@ -144,19 +144,23 @@ public class RequestAppendEntriesDecode extends ReplayingDecoder<AppendEntiesMsg
             term = State.currentTerm;
             ctx.channel().write(Unpooled.copyLong(term));
             ctx.channel().write(Unpooled.copyBoolean(false));
+            ctx.channel().flush();
             return;
         }
         //refuse if it doesn't contain prevLogIndex
         if (prevLogIndex != -1 && prevLogIndex > State.log.size()-1) {
+            logger.info("find a conflict with prevLogIndex");
             ctx.channel().write(Unpooled.copyLong(term));
             ctx.channel().write(Unpooled.copyBoolean(false));
+            ctx.channel().flush();
             return;
         }
         //refuse if it doesn't match prevTerm at prevLogIndex
-        if (prevLogIndex != -1 && State.log.get((int)prevLogIndex).getTerm() != term) {
+        if (prevLogIndex != -1 && State.log.get((int)prevLogIndex).getTerm() != prevTerm) {
+            logger.info("find a conflict with prevTerm");
             ctx.channel().write(Unpooled.copyLong(term));
             ctx.channel().write(Unpooled.copyBoolean(false));
-
+            ctx.channel().flush();
             return;
         }
         //if an existing entry conflicts with new one, delete the existing entry and all that follow it

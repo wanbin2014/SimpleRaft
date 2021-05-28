@@ -51,7 +51,6 @@ public class State {
     static int connectSucess;
     static int appendEntrySuccess;
 
-
     public static void setMembers(String[] members) {
         State.members = members;
 
@@ -77,16 +76,17 @@ public class State {
             String fileName = "./" + candidateId + ".log";
             BufferedReader input = new BufferedReader(new FileReader(fileName));
             String line;
-            long idx = -1;
+            long idx = 0;
             while ((line = input.readLine()) != null) {
                 log.add(Entry.getEntry(line));
                 idx++;
             }
             input.close();
+            writeLogIndex = log.size();
 
             commitIndex = -1;
             for(int i = 0; i < members.length; i++) {
-                nextIndex.put(members[i], idx);
+                nextIndex.put(members[i], (long)log.size());
                 matchIndex.put(members[i],0L);
             }
         } catch (FileNotFoundException e) {
@@ -95,7 +95,7 @@ public class State {
 
             commitIndex = -1;
             for(int i = 0; i < members.length; i++) {
-                nextIndex.put(members[i], -1L);
+                nextIndex.put(members[i], 0L);
                 matchIndex.put(members[i],0L);
             }
         }
@@ -259,7 +259,7 @@ public class State {
                             future.channel().write(Unpooled.copiedBuffer(appendEntries.getEntries().get(i).toString(),
                                     CharsetUtil.UTF_8));
                         }
-                        replicatedLogIndex = appendEntries.getPrevLogIndex() + appendEntries.getEntries().size() - 1;
+                        replicatedLogIndex =  appendEntries.getPrevLogIndex() + 1 + appendEntries.getEntries().size() - 1;
                     }
                     future.channel().write(Unpooled.copyLong(appendEntries.getLeaderCommit()));
                 }
@@ -324,7 +324,7 @@ public class State {
                 appendEntrySuccess = 0;
                 callAllAppendEntries(false);
                 try {
-                    while (appendEntrySuccess <= members.length / 2.0) {
+                    while (appendEntrySuccess < members.length / 2.0) {
                         long endTime =  System.nanoTime();
                         long residual = timeout - (endTime - startTime) / 1000000;
                         if (residual <= 0) {
@@ -353,7 +353,7 @@ public class State {
 
     public static synchronized void callAllAppendEntries(boolean containEntries) {
         for(int i = 0; i < members.length; i++) {
-            long prevLogIndex = State.nextIndex.get(members[i]);
+            long prevLogIndex = State.nextIndex.get(members[i]) - 1;
             long prevLogTerm = 0;
             if (State.log.size() == 0 || prevLogIndex == -1) {
                 prevLogTerm = 0;
@@ -376,8 +376,8 @@ public class State {
 
                         entries.add(new Entry(State.log.get(j).term, State.log.get(j).command));
                     } else {
-                        entries.add(new Entry(State.log.get(j + (int) prevLogIndex).term,
-                                State.log.get(j + (int) prevLogIndex).command));
+                        entries.add(new Entry(State.log.get(j + (int) prevLogIndex + 1).term,
+                                State.log.get(j + (int) prevLogIndex + 1).command));
                     }
                 }
             }
@@ -392,7 +392,7 @@ public class State {
     public  static synchronized void startElection(int random)  {
 
         try {
-            State.class.wait(random * 1000);
+            State.class.wait(random * 1000 < 5000 ? 5000 : random * 1000);
             if (leaderId == null) {
                 currentTerm += 1;
             }
@@ -424,21 +424,28 @@ public class State {
                     }
 
                     logger.info("CurrentTerm:{}, request vote to all server", currentTerm);
+
                     State.class.wait(10000);
                     logger.info("CurrentTerm:{}, receive {} votes", currentTerm, voteCount);
 
 
                     //received a majority of votes , upgrade to leader
-                    if ((voteCount + 1) > (float) (members.length / 2.0) && leaderId == null) {
+                    if (voteCount >= (float) (members.length / 2.0) && leaderId == null) {
                         logger.info("Succeed in election");
                         leaderId = candidateId;
                         heartbeatThread = new Thread(new Heartbeat(5000));
                         heartbeatThread.start();
+                        for(int i = 0; i < members.length; i++) {
+                            nextIndex.put(members[i], (long)log.size());
+                            matchIndex.put(members[i],0L);
+                        }
+
                     }
                     State.class.wait(random * 1000);
 
                 } else {
-                    State.class.wait(1000);
+                    State.class.wait(random * 1000);
+                    connectSucess = members.length;
                 }
             }
         } catch (InterruptedException e) {

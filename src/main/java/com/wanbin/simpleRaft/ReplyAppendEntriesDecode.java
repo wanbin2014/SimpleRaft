@@ -57,7 +57,7 @@ public class ReplyAppendEntriesDecode extends ReplayingDecoder<ReplyAppendEntrie
                     nextIdx -= 1;
                     State.nextIndex.put(peer, (long) nextIdx);
                     //RPC type. 1 for RequestVote 2 for AppendEntries
-                    ctx.channel().write(Unpooled.copyInt(2));
+                    //ctx.channel().write(Unpooled.copyInt(2));
                     ctx.channel().write(Unpooled.copyLong(State.currentTerm));
                     ctx.channel().write(Unpooled.copiedBuffer(State.leaderId, CharsetUtil.UTF_8));
                     ctx.channel().write(Unpooled.copyLong(nextIdx));
@@ -86,26 +86,30 @@ public class ReplyAppendEntriesDecode extends ReplayingDecoder<ReplyAppendEntrie
                     ctx.channel().flush();
                     ctx.channel().pipeline().addLast(new ReplyAppendEntriesDecode(peer, replicatedLogIndex));
                     ctx.channel().pipeline().remove(this);
+                    logger.info("fail to heartbeat, because find conflict, decrease nextIndex");
                 }
             }
         } else {
             synchronized (State.class) {
 
-                if (this.replicatedLogIndex != 0) {
+                if (this.replicatedLogIndex != -1) {
                     State.appendEntriesResult.compute(this.replicatedLogIndex, (k, v) -> {
                         if (v == null) {
                             return 1;
-                        } else if (v + 1 > (float) (State.members.length / 2.0)) {
+                        } else if (v + 1 >= (float) (State.members.length / 2.0)) {
                             if (this.replicatedLogIndex > State.matchIndex.get(peer).longValue()) {
                                 State.matchIndex.put(peer, this.replicatedLogIndex);
-                                notifyAll();
+                                State.class.notifyAll();
                             }
                             return null;
                         } else {
                             return v + 1;
                         }
                     });
+                    State.nextIndex.put(peer, this.replicatedLogIndex+1);
                 }
+
+
 
             }
             ctx.close();

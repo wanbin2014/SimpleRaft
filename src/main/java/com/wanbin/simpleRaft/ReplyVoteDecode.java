@@ -35,10 +35,10 @@ public class ReplyVoteDecode extends ReplayingDecoder<ReplyVoteMsg> {
                 throw new Error("Shouldn't reach here!");
         }
         logger.info("Received a reply from a request of vote, term={}, voteGranted={}", term, voteGranted);
-        if (voteGranted == true) {
+        if (voteGranted == true && State.currentTerm == term) {
             synchronized (State.class) {
                 State.voteCount += 1;
-                if (State.voteCount > (float) (State.members.length / 2.0)) {
+                if (State.voteCount >= (float) (State.members.length / 2.0)) {
                     logger.info("The number of received votes upper to majority, notify related thread!");
                     State.class.notifyAll();
                 }
