@@ -1,5 +1,7 @@
 package com.wanbin.simpleRaft.rpc;
 
+import com.wanbin.simpleRaft.Entry;
+
 import java.util.List;
 
 public class AppendEntries {
@@ -7,11 +9,11 @@ public class AppendEntries {
     String leaderId;
     long  prevLogIndex; //index of log entry immediately preceding new ones
     long prevLogTerm; //term of prevLogIndex entry
-    List<String> entries; // log entries to store ,empty for heartbeat
+    List<Entry> entries; // log entries to store ,empty for heartbeat
     long leaderCommit; //leader's commitIndex
 
 
-    public AppendEntries(long term, String leaderId, long prevLogIndex, long prevLogTerm, List<String> entries, long leaderCommit) {
+    public AppendEntries(long term, String leaderId, long prevLogIndex, long prevLogTerm, List<Entry> entries, long leaderCommit) {
         this.term = term;
         this.leaderId = leaderId;
         this.prevLogIndex = prevLogIndex;
@@ -36,7 +38,7 @@ public class AppendEntries {
         return prevLogTerm;
     }
 
-    public List<String> getEntries() {
+    public List<Entry> getEntries() {
         return entries;
     }
 

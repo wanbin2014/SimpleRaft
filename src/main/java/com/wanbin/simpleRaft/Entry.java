@@ -30,6 +30,11 @@ public class Entry {
         return term + ":" + command;
     }
 
+    public static Entry getEntry(String line) {
+        String[] fields = line.split(":");
+        return new Entry(Long.valueOf(fields[0]), fields[1]);
+    }
+
     public void commit() {
 
 

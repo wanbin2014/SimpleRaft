@@ -110,8 +110,7 @@ public class RequestAppendEntriesDecode extends ReplayingDecoder<AppendEntiesMsg
                     String content = (String) in.readCharSequence(entryLen.get(entryLen.size() - 1),
                             CharsetUtil.UTF_8);
 
-                    String[] fields = content.split(",");
-                    Entry entry = new Entry(Long.valueOf(fields[0]), fields[1]);
+                    Entry entry = Entry.getEntry(content);
                     entries.add(entry);
                     entryCount += 1;
                     if (entryCount == entryNum) {
@@ -136,8 +135,9 @@ public class RequestAppendEntriesDecode extends ReplayingDecoder<AppendEntiesMsg
                 continue;
             }
         }
-        logger.info("received a request of heartbeat. term={},leaderId={},prevLogIndex={},prevLogTerm={},leaderCommit={}",
-                term,leaderId,prevLogIndex,prevTerm,leaderCommit);
+        logger.info("Received a request of AppendEntries. " +
+                "term={},leaderId={},prevLogIndex={},prevLogTerm={},log={},leaderCommit={}",
+                term,leaderId,prevLogIndex,prevTerm,entries,leaderCommit);
         boolean success;
         //refuse if term < currentTerm
         if (term < State.currentTerm) {
@@ -147,13 +147,13 @@ public class RequestAppendEntriesDecode extends ReplayingDecoder<AppendEntiesMsg
             return;
         }
         //refuse if it doesn't contain prevLogIndex
-        if (prevLogIndex != 0 && prevLogIndex > State.log.size()-1) {
+        if (prevLogIndex != -1 && prevLogIndex > State.log.size()-1) {
             ctx.channel().write(Unpooled.copyLong(term));
             ctx.channel().write(Unpooled.copyBoolean(false));
             return;
         }
         //refuse if it doesn't match prevTerm at prevLogIndex
-        if (prevLogIndex != 0 && State.log.get((int)prevLogIndex).getTerm() != term) {
+        if (prevLogIndex != -1 && State.log.get((int)prevLogIndex).getTerm() != term) {
             ctx.channel().write(Unpooled.copyLong(term));
             ctx.channel().write(Unpooled.copyBoolean(false));
 
@@ -161,6 +161,9 @@ public class RequestAppendEntriesDecode extends ReplayingDecoder<AppendEntiesMsg
         }
         //if an existing entry conflicts with new one, delete the existing entry and all that follow it
         synchronized (State.class) {
+            if (State.currentTerm < term) {
+                State.currentTerm = term;
+            }
             if (State.log.size() > 0 && prevLogIndex < State.log.size() - 1) {
                 int i = (int) prevLogIndex + 1;
                 for (; i < State.log.size(); i++) {

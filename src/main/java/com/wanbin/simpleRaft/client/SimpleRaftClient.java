@@ -14,12 +14,15 @@ import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
 import io.netty.util.CharsetUtil;
 import org.apache.commons.cli.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class SimpleRaftClient {
+    final  static  Logger logger = LoggerFactory.getLogger(SimpleRaftClient.class);
     public static void main(String[] args) {
         CommandLineParser parser = new DefaultParser();
         Options options = new Options();
@@ -56,7 +59,7 @@ public class SimpleRaftClient {
         Bootstrap b = new Bootstrap()
                 .group(workGroup)
                 .channel(NioSocketChannel.class)
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 100)
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) throws Exception {
@@ -78,6 +81,7 @@ public class SimpleRaftClient {
 
                 }
                 future.channel().flush();
+                logger.info("Send a request to server successfully! wait for reply");
 
             }
 
@@ -87,17 +91,19 @@ public class SimpleRaftClient {
             LsReplyDecode decode = (LsReplyDecode) f.channel().pipeline().last();
             List<String> res = decode.getResponse();
             for(int i = 0; i < res.size(); i++) {
-                System.out.println(i+1 + "." + res.get(i));
+                logger.info(i+1 + "." + res.get(i));
             }
         } else if (f.channel().pipeline().last() instanceof AddReplyDecode) {
             AddReplyDecode decode = (AddReplyDecode) f.channel().pipeline().last();
             if (decode.getResponse() == 0) {
-                System.out.println("Success!");
+                logger.info("Succeed to execute command!");
+            } else if (decode.getResponse() == 2) {
+                logger.info("Response timeout!");
             } else {
-                System.out.println("Occur error, Err code:" + decode.getResponse());
+                logger.info("Occur error, Err code:" + decode.getResponse());
             }
         } else {
-            System.out.println("internal error!");
+            logger.info("internal error!");
         }
 
 

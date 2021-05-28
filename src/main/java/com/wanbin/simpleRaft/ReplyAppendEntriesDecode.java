@@ -51,6 +51,9 @@ public class ReplyAppendEntriesDecode extends ReplayingDecoder<ReplyAppendEntrie
                 synchronized (State.class) {
                     //The follower's log is inconsistent with leader's, then decrements nextIndex and retries.
                     int nextIdx = State.nextIndex.get(peer).intValue();
+                    if (nextIdx < 0) {
+                        logger.info("Cann't decrement nextIndex, because nextIndex is at beginning");
+                    }
                     nextIdx -= 1;
                     State.nextIndex.put(peer, (long) nextIdx);
                     //RPC type. 1 for RequestVote 2 for AppendEntries
@@ -58,7 +61,11 @@ public class ReplyAppendEntriesDecode extends ReplayingDecoder<ReplyAppendEntrie
                     ctx.channel().write(Unpooled.copyLong(State.currentTerm));
                     ctx.channel().write(Unpooled.copiedBuffer(State.leaderId, CharsetUtil.UTF_8));
                     ctx.channel().write(Unpooled.copyLong(nextIdx));
-                    ctx.channel().write(Unpooled.copyLong(State.log.get(nextIdx).getTerm()));
+                    if (nextIdx == -1) {
+                        ctx.channel().write(Unpooled.copyLong(0));
+                    } else {
+                        ctx.channel().write(Unpooled.copyLong(State.log.get(nextIdx).getTerm()));
+                    }
 
                     int num = State.log.size() - 1 - nextIdx;
                     long replicatedLogIndex = 0;
@@ -84,7 +91,6 @@ public class ReplyAppendEntriesDecode extends ReplayingDecoder<ReplyAppendEntrie
         } else {
             synchronized (State.class) {
 
-                State.appendEntrySuccess++;
                 if (this.replicatedLogIndex != 0) {
                     State.appendEntriesResult.compute(this.replicatedLogIndex, (k, v) -> {
                         if (v == null) {

@@ -45,6 +45,8 @@ public class SimpleRaftServer {
 
             f.channel().closeFuture().sync();
             System.out.println("server quit");
+        } catch (Exception e) {
+            e.printStackTrace();
         } finally {
             workerGroup.shutdownGracefully();
             bossGroup.shutdownGracefully();

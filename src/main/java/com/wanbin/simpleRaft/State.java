@@ -77,15 +77,14 @@ public class State {
             String fileName = "./" + candidateId + ".log";
             BufferedReader input = new BufferedReader(new FileReader(fileName));
             String line;
-            long idx = 0;
+            long idx = -1;
             while ((line = input.readLine()) != null) {
-                String[] fields = line.split(",");
-                log.add(new Entry(Long.valueOf(fields[0]), fields[1]));
+                log.add(Entry.getEntry(line));
                 idx++;
             }
             input.close();
 
-            commitIndex = 0;
+            commitIndex = -1;
             for(int i = 0; i < members.length; i++) {
                 nextIndex.put(members[i], idx);
                 matchIndex.put(members[i],0L);
@@ -94,9 +93,9 @@ public class State {
             currentTerm = 0;
             votedFor = null;
 
-            commitIndex = 0;
+            commitIndex = -1;
             for(int i = 0; i < members.length; i++) {
-                nextIndex.put(members[i], 0L);
+                nextIndex.put(members[i], -1L);
                 matchIndex.put(members[i],0L);
             }
         }
@@ -115,8 +114,10 @@ public class State {
     }
 
     public static void shutdown() {
-        applyLogThread.interrupt();
-        writeLogThread.interrupt();
+        if (applyLogThread != null)
+            applyLogThread.interrupt();
+        if (writeLogThread != null)
+            writeLogThread.interrupt();
 
         while (applyLogThread.isAlive() || writeLogThread.isAlive()) {
             try {
@@ -142,11 +143,13 @@ public class State {
     public static class WriteLog implements Runnable {
 
         private void flush() {
-            synchronized (State.class) {
                 try {
                     String fileName = "./" + candidateId + ".meta";
                     BufferedWriter writer = new BufferedWriter(new FileWriter(fileName));
-                    String s = currentTerm + "," + votedFor;
+                    String s;
+                    synchronized (State.class) {
+                        s = currentTerm + "," + votedFor;
+                    }
                     writer.write(s);
                     writer.close();
                 } catch (IOException e) {
@@ -156,16 +159,21 @@ public class State {
                     String fileName = "./" + candidateId + ".log";
                     BufferedWriter writer = new BufferedWriter(new FileWriter(fileName, true));
 
-                    for (int i = writeLogIndex; i < State.log.size(); i++) {
-                        String line = State.log.get(i).toString();
-                        writer.write(line);
+                    synchronized (State.class) {
+                        for (int i = writeLogIndex; i < State.log.size(); i++) {
+                            String line = State.log.get(i).toString();
+                            writer.write(line + '\n');
+                        }
+                        if (State.log.size() > 0) {
+                            writeLogIndex = State.log.size();
+                        }
                     }
                     writer.close();
 
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
-            }
+
         }
 
 
@@ -227,30 +235,34 @@ public class State {
 
         ChannelFuture f = b.connect(ip, port).addListener((ChannelFuture future) -> {
             if (future.isSuccess()) {
-                //RPC type. 1 for RequestVote, 2 for AppendEntries
-                future.channel().write(Unpooled.copyInt(2));
-                future.channel().write(Unpooled.copyLong(appendEntries.getTerm()));
-                future.channel().write(Unpooled.copyInt(appendEntries.getLeaderId()
-                        .getBytes(StandardCharsets.UTF_8).length));
-                future.channel().write(Unpooled.copiedBuffer(appendEntries.getLeaderId(),CharsetUtil.UTF_8));
-                future.channel().write(Unpooled.copyLong(appendEntries.getPrevLogIndex()));
-                future.channel().write(Unpooled.copyLong(appendEntries.getPrevLogTerm()));
                 long replicatedLogIndex = 0;
-                if (appendEntries.getEntries() == null || appendEntries.getEntries().size() == 0) {
-                    future.channel().write(Unpooled.copyLong(0));
-                    replicatedLogIndex = appendEntries.getPrevLogIndex();
-                } else {
-                    future.channel().write(Unpooled.copyLong(appendEntries.getEntries().size()));
-                    for(int i = 0; i < appendEntries.getEntries().size(); i++) {
-                        future.channel().write(Unpooled.copyInt(appendEntries.getEntries().get(i)
-                                .getBytes(StandardCharsets.UTF_8).length));
+                synchronized (State.class) {
+                    //RPC type. 1 for RequestVote, 2 for AppendEntries
+                    future.channel().write(Unpooled.copyInt(2));
+                    future.channel().write(Unpooled.copyLong(appendEntries.getTerm()));
+                    future.channel().write(Unpooled.copyInt(appendEntries.getLeaderId()
+                            .getBytes(StandardCharsets.UTF_8).length));
+                    future.channel().write(Unpooled.copiedBuffer(appendEntries.getLeaderId(), CharsetUtil.UTF_8));
+                    future.channel().write(Unpooled.copyLong(appendEntries.getPrevLogIndex()));
+                    future.channel().write(Unpooled.copyLong(appendEntries.getPrevLogTerm()));
 
-                        future.channel().write(Unpooled.copiedBuffer(appendEntries.getEntries().get(i),
-                                CharsetUtil.UTF_8));
+                    if (appendEntries.getEntries() == null || appendEntries.getEntries().size() == 0) {
+                        future.channel().write(Unpooled.copyLong(0));
+                        replicatedLogIndex = appendEntries.getPrevLogIndex();
+                        State.appendEntrySuccess++;
+                    } else {
+                        future.channel().write(Unpooled.copyLong(appendEntries.getEntries().size()));
+                        for (int i = 0; i < appendEntries.getEntries().size(); i++) {
+                            future.channel().write(Unpooled.copyInt(appendEntries.getEntries().get(i).toString()
+                                    .getBytes(StandardCharsets.UTF_8).length));
+
+                            future.channel().write(Unpooled.copiedBuffer(appendEntries.getEntries().get(i).toString(),
+                                    CharsetUtil.UTF_8));
+                        }
+                        replicatedLogIndex = appendEntries.getPrevLogIndex() + appendEntries.getEntries().size() - 1;
                     }
-                    replicatedLogIndex = appendEntries.getPrevLogIndex() + appendEntries.getEntries().size() - 1;
+                    future.channel().write(Unpooled.copyLong(appendEntries.getLeaderCommit()));
                 }
-                future.channel().write(Unpooled.copyLong(appendEntries.getLeaderCommit()));
                 future.channel().flush();
                 future.channel().pipeline().addLast(new ReplyAppendEntriesDecode(peer, replicatedLogIndex));
             }
@@ -343,21 +355,30 @@ public class State {
         for(int i = 0; i < members.length; i++) {
             long prevLogIndex = State.nextIndex.get(members[i]);
             long prevLogTerm = 0;
-            if (State.log.size() == 0) {
+            if (State.log.size() == 0 || prevLogIndex == -1) {
                 prevLogTerm = 0;
             } else {
                 prevLogTerm = State.log.get((int) prevLogIndex).term;
             }
 
-            List<String> entries = null;
+            List<Entry> entries = null;
             if (containEntries == true) {
                 entries = new ArrayList();
-                int num = State.log.size() - 1 - (int) prevLogIndex;
+                int num = 0;
+                if (prevLogIndex == -1) {
+                    num = State.log.size();
+                } else {
+                    num = State.log.size() - 1 - (int) prevLogIndex;
+                }
 
                 for (int j = 0; j < num; j++) {
-                    String content = String.valueOf(State.log.get(j + (int) prevLogIndex).term) + ","
-                            + State.log.get(j + (int) prevLogIndex).command;
-                    entries.add(content);
+                    if (prevLogIndex == -1) {
+
+                        entries.add(new Entry(State.log.get(j).term, State.log.get(j).command));
+                    } else {
+                        entries.add(new Entry(State.log.get(j + (int) prevLogIndex).term,
+                                State.log.get(j + (int) prevLogIndex).command));
+                    }
                 }
             }
 

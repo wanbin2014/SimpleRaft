@@ -19,7 +19,7 @@ public class FirstDecode extends ReplayingDecoder<Void> {
             ctx.pipeline().addLast(new RequestAppendEntriesDecode());
             ctx.pipeline().remove(this);
         } else if (type.equals(3)) {
-            ctx.pipeline().addLast(new ClientAddRequestDecode());
+            ctx.pipeline().addLast(new ClientAddRequestDecode(1000));
             ctx.pipeline().remove(this);
         } else if (type.equals(4)) {
             ctx.pipeline().addLast(new ClientLsRequestDecode());
