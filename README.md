@@ -15,11 +15,13 @@ refer to ：https://raft.github.io/raft.pdf
 
 xx.log的格式
 > 5:hello
+
 5 表示term号
 hello 表示日志内容
 
 xx.meta的格式
 >48,127.0.0.1:3002
+
 48 表示最新的term
 127.0.0.1:3002 表示voteFor
 
