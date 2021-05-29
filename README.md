@@ -10,8 +10,7 @@ refer to ：https://raft.github.io/raft.pdf
 
 ## 示例
 
-下面以在同一台机器上，启动4个server为例说明：
-复制的日志文件xx.log和系统数据xx.meta会保存在当前目录下。
+复制的日志文件xx.log和系统数据xx.meta会保存在程序的当前目录下。
 
 xx.log的格式
 > 5:hello
@@ -24,6 +23,8 @@ xx.meta的格式
 
 48 表示最新的term
 127.0.0.1:3002 表示voteFor
+
+下面以在同一台机器上，启动4个server为例说明。
 
 - server
 
