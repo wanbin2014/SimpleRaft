@@ -10,6 +10,7 @@ server
 `
   mvn compile exec:java -Dexec.mainClass="com.wanbin.simpleRaft.SimpleRaftServer" -Dexec.args="-i 127.0.0.1 -p 3001 -m 127.0.0.3001,127.0.0.1:3002,127.0.0.1:3003,127.0.0.1:3004"
 `
+
 `
   mvn compile exec:java -Dexec.mainClass="com.wanbin.simpleRaft.SimpleRaftServer" -Dexec.args="-i 127.0.0.1 -p 3002 -m 127.0.0.3001,127.0.0.1:3002,127.0.0.1:3003,127.0.0.1:3004"
 `
