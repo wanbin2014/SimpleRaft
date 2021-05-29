@@ -1,6 +1,6 @@
-package com.wanbin.simpleRaft.rpc;
+package org.simpleRaft.simpleRaft.rpc;
 
-import com.wanbin.simpleRaft.Entry;
+import org.simpleRaft.simpleRaft.Entry;
 
 import java.util.List;
 

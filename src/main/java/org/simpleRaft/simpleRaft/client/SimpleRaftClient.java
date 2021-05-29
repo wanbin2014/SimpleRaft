@@ -1,6 +1,6 @@
-package com.wanbin.simpleRaft.client;
+package org.simpleRaft.simpleRaft.client;
 
-import com.wanbin.simpleRaft.SimpleRaftServer;
+import org.simpleRaft.simpleRaft.SimpleRaftServer;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
@@ -10,7 +10,6 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.ReplayingDecoder;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
 import io.netty.util.CharsetUtil;
@@ -20,7 +19,6 @@ import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 public class SimpleRaftClient {
     final  static  Logger logger = LoggerFactory.getLogger(SimpleRaftClient.class);

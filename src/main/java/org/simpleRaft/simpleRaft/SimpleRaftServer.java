@@ -1,4 +1,4 @@
-package com.wanbin.simpleRaft;
+package org.simpleRaft.simpleRaft;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;

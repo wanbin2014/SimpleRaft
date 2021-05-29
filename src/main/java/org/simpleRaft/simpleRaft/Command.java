@@ -1,4 +1,4 @@
-package com.wanbin.simpleRaft;
+package org.simpleRaft.simpleRaft;
 
 enum CommandType {
     LS,

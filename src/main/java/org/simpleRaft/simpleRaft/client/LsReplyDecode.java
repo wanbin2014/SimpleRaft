@@ -1,4 +1,4 @@
-package com.wanbin.simpleRaft.client;
+package org.simpleRaft.simpleRaft.client;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
