@@ -6,6 +6,9 @@ refer to ：https://raft.github.io/raft.pdf
 ### leader election
 ### log replication
 
+
+### 实例
+
 server
 
 `
