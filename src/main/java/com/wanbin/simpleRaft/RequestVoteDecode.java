@@ -51,7 +51,7 @@ public class RequestVoteDecode extends ReplayingDecoder<RequestVoteMsg> {
             default:
                 throw new Error("Shouldn't reach here!");
         }
-
+        State.WriteLog.flush();
         logger.info("Received a request for vote from {}, " +
                 "term={}, lastLogIndex={}, lastTerm", candidateId, term, lastLogIndex, lastTerm);
         //Receiver implementation:

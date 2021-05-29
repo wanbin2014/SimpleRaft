@@ -10,6 +10,7 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.ReplayingDecoder;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.handler.timeout.WriteTimeoutHandler;
 import io.netty.util.CharsetUtil;
@@ -56,6 +57,9 @@ public class SimpleRaftClient {
 
 
 
+            AddReplyDecode decode = new AddReplyDecode();
+        LsReplyDecode decode1 = new LsReplyDecode();
+
         Bootstrap b = new Bootstrap()
                 .group(workGroup)
                 .channel(NioSocketChannel.class)
@@ -71,24 +75,41 @@ public class SimpleRaftClient {
         ChannelFuture f = b.connect(ip, port).addListener((ChannelFuture future) -> {
             if (future.isSuccess()) {
                 if (command[0].equals("ls")) {
-                    future.channel().write(Unpooled.copyLong(4));
+                    future.channel().write(Unpooled.copyInt(4));
                     future.channel().flush();
-                    future.channel().pipeline().addLast(new LsReplyDecode());
+                    future.channel().pipeline().addLast(decode1);
                 } else if (command[0].equals("add")) {
-                    future.channel().write(Unpooled.copyLong(3));
+                    future.channel().write(Unpooled.copyInt(3));
                     future.channel().write(Unpooled.copyInt(command[1].getBytes(StandardCharsets.UTF_8).length));
                     future.channel().write(Unpooled.copiedBuffer(command[1], CharsetUtil.UTF_8));
                     future.channel().flush();
-                    future.channel().pipeline().addLast(new AddReplyDecode());
+                    future.channel().pipeline().addLast(decode);
 
                 }
-                future.channel().flush();
                 logger.info("Send a request to server successfully! wait for reply");
 
             }
 
         });
-        f.channel().closeFuture().sync();
+        if (command[0].equals("add")) {
+            if (decode.getResponse() == 0) {
+                logger.info("Succeed to execute command!");
+            } else {
+                logger.info("Occur error, Err code:" + decode.getResponse());
+            }
+        }
+            if (command[0].equals("ls")) {
+
+                if (decode1.getResponse() != null) {
+                    logger.info("Succeed to execute command! {}", decode1.getResponse());
+                } else {
+                    logger.info("Occur error");
+                }
+            }
+
+
+            f.channel().closeFuture().sync();
+            /*
         if (f.channel().pipeline().last() instanceof LsReplyDecode) {
             LsReplyDecode decode = (LsReplyDecode) f.channel().pipeline().last();
             List<String> res = decode.getResponse();
@@ -108,6 +129,8 @@ public class SimpleRaftClient {
             logger.info("internal error! invalid class, class is {}", f.channel().pipeline().last());
         }
 
+
+             */
 
         } catch (Exception e) {
             e.printStackTrace();

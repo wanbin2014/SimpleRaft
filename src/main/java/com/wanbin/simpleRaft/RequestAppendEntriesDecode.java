@@ -135,6 +135,7 @@ public class RequestAppendEntriesDecode extends ReplayingDecoder<AppendEntiesMsg
                 continue;
             }
         }
+        State.WriteLog.flush();
         logger.info("Received a request of AppendEntries. " +
                 "term={},leaderId={},prevLogIndex={},prevLogTerm={},log={},leaderCommit={}",
                 term,leaderId,prevLogIndex,prevTerm,entries,leaderCommit);

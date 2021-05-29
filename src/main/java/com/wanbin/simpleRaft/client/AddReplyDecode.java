@@ -10,14 +10,23 @@ import java.util.List;
 
 public class AddReplyDecode extends ReplayingDecoder<Integer> {
     final static Logger logger = LoggerFactory.getLogger(AddReplyDecode.class);
-    int res;
-    public int getResponse() {
+    Integer res = null;
+    public synchronized int getResponse() {
+        while (res == null) {
+            try {
+                wait();
+            } catch (InterruptedException e) {
+                return -1;
+            }
+        }
         return res;
+
     }
     @Override
-    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+    protected synchronized void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
         res = in.readInt();
         logger.info("Received reply from leader successfully");
+        notify();
         ctx.close();
     }
 }

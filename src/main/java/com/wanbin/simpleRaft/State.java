@@ -142,7 +142,7 @@ public class State {
 
     public static class WriteLog implements Runnable {
 
-        private void flush() {
+        synchronized static void flush() {
                 try {
                     String fileName = "./" + candidateId + ".meta";
                     BufferedWriter writer = new BufferedWriter(new FileWriter(fileName));
@@ -168,6 +168,7 @@ public class State {
                             writeLogIndex = State.log.size();
                         }
                     }
+
                     writer.close();
 
                 } catch (IOException e) {
@@ -180,11 +181,15 @@ public class State {
         @Override
         public synchronized void run() {
             while (true) {
-                flush();
-                try {
-                    wait(1000);
-                } catch (InterruptedException e) {
+                if (leaderId != null && leaderId.equals(candidateId)) {
                     flush();
+                }
+                try {
+                    wait(5000);
+                } catch (InterruptedException e) {
+                    if (leaderId != null && leaderId.equals(candidateId)) {
+                        flush();
+                    }
                     break;
                 }
 

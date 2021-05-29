@@ -67,7 +67,7 @@ public class ClientAddRequestDecode extends ReplayingDecoder<AddMsg> {
                         }
                     });
             String[] fields = State.leaderId.split(":");
-            ChannelFuture f = b.connect(fields[0], Integer.valueOf(fields[1])).addListener((ChannelFuture future) -> {
+            b.connect(fields[0], Integer.valueOf(fields[1])).addListener((ChannelFuture future) -> {
                 if (future.isSuccess()) {
                     future.channel().write(Unpooled.copyInt(3));
                     future.channel().write(Unpooled.copyInt(len));
@@ -75,7 +75,6 @@ public class ClientAddRequestDecode extends ReplayingDecoder<AddMsg> {
                     future.channel().flush();
                 }
             });
-            f.channel().closeFuture().sync();
             return;
         }
 
@@ -150,12 +149,17 @@ class SocksCopyHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
 
-        peer.writeAndFlush(msg).addListener(future -> {
+        peer.write(msg).addListener(future -> {
             if (!future.isSuccess()) {
                 logger.error("write failed, peer={}", peer.remoteAddress());
                 ctx.close();
             }
         });
     }
+    @Override
+    public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
+        peer.flush();
+    }
+
 
 }
