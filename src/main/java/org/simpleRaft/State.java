@@ -1,7 +1,7 @@
-package org.simpleRaft.simpleRaft;
+package org.simpleRaft;
 
-import org.simpleRaft.simpleRaft.rpc.AppendEntries;
-import org.simpleRaft.simpleRaft.rpc.RequestVote;
+import org.simpleRaft.rpc.AppendEntries;
+import org.simpleRaft.rpc.RequestVote;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;

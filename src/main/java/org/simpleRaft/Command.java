@@ -1,4 +1,4 @@
-package org.simpleRaft.simpleRaft;
+package org.simpleRaft;
 
 enum CommandType {
     LS,

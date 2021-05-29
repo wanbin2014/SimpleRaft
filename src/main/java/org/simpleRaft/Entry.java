@@ -1,4 +1,4 @@
-package org.simpleRaft.simpleRaft;
+package org.simpleRaft;
 
 public class Entry {
     long term;

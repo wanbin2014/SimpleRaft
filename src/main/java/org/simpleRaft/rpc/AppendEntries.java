@@ -1,6 +1,6 @@
-package org.simpleRaft.simpleRaft.rpc;
+package org.simpleRaft.rpc;
 
-import org.simpleRaft.simpleRaft.Entry;
+import org.simpleRaft.Entry;
 
 import java.util.List;
 

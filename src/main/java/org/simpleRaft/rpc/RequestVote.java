@@ -1,4 +1,4 @@
-package org.simpleRaft.simpleRaft.rpc;
+package org.simpleRaft.rpc;
 
 public class RequestVote {
     long term; //candidate's term

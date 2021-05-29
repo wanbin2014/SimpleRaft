@@ -1,6 +1,5 @@
-package org.simpleRaft.simpleRaft.client;
+package org.simpleRaft.client;
 
-import org.simpleRaft.simpleRaft.SimpleRaftServer;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
