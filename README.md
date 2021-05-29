@@ -26,7 +26,7 @@ server
 
 client
 
-`<code>
- mvn compile exec:java -Dexec.mainClass="com.wanbin.simpleRaft.client.SimpleRaftClient" -Dexec.args="-i 127.0.0.1 -p 3002 -c "add world3""
+`
+ mvn compile exec:java -Dexec.mainClass="com.wanbin.simpleRaft.client.SimpleRaftClient" -Dexec.args="-i 127.0.0.1 -p 3002 -c \"add world3\""
  `
  可以连接到集群中任意上。
